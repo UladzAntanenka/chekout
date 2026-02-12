@@ -2,18 +2,38 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// CORS headers
-const corsHeaders = {
-  "Access-Control-Allow-Origin": process.env.FRONTEND_URL || "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+// Функция для получения разрешённых origin
+const getAllowedOrigins = () => {
+  const frontendUrl = process.env.FRONTEND_URL;
+  if (!frontendUrl) return ["*"];
+  
+  const origins = [frontendUrl];
+  
+  // Добавляем вариант без www
+  if (frontendUrl.includes("www.")) {
+    origins.push(frontendUrl.replace("www.", ""));
+  } else {
+    // Добавляем вариант с www
+    origins.push(frontendUrl.replace("https://", "https://www."));
+  }
+  
+  return origins;
 };
 
+const allowedOrigins = getAllowedOrigins();
+
 export default async function handler(req, res) {
-  // Установка CORS headers
-  Object.entries(corsHeaders).forEach(([key, value]) => {
-    res.setHeader(key, value);
-  });
+  // Динамическая установка CORS headers
+  const origin = req.headers.origin;
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else if (allowedOrigins.includes("*")) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   // Обработка preflight запросов
   if (req.method === "OPTIONS") {
@@ -41,12 +61,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Некорректный тип платежа" });
     }
 
+    // Определяем правильный URL для редиректа (используем origin запроса)
+    const baseUrl = origin && allowedOrigins.includes(origin) 
+      ? origin 
+      : process.env.FRONTEND_URL;
+
     // Создание Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       mode: type === "monthly" ? "subscription" : "payment",
       customer_email: email,
-      success_url: `${process.env.FRONTEND_URL}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/donate`,
+      success_url: `${baseUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/donate`,
       line_items: [
         {
           price_data: {
