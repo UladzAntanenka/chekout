@@ -46,7 +46,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { amount, email, type } = req.body;
+    const { amount, email, type, returnUrl } = req.body;
+
+    // ВРЕМЕННО ДЛЯ ОТЛАДКИ
+    console.log('=== DEBUG START ===');
+    console.log('Received returnUrl:', returnUrl);
+    console.log('Full request body:', req.body);
+    console.log('Origin:', origin);
 
     // Валидация
     if (!amount || amount < 1) {
@@ -61,17 +67,25 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Некорректный тип платежа" });
     }
 
-    // Определяем правильный URL для редиректа (используем origin запроса)
+    // Определяем правильный URL для редиректа
     const baseUrl = origin && allowedOrigins.includes(origin) 
       ? origin 
       : process.env.FRONTEND_URL;
+
+    // Используем returnUrl если он есть, иначе дефолтный
+    const cancelUrl = returnUrl || `${baseUrl}/donate`;
+    
+    // ВРЕМЕННО ДЛЯ ОТЛАДКИ
+    console.log('BaseUrl:', baseUrl);
+    console.log('Final cancelUrl:', cancelUrl);
+    console.log('=== DEBUG END ===');
 
     // Создание Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       mode: type === "monthly" ? "subscription" : "payment",
       customer_email: email,
       success_url: `${baseUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/donate`,
+      cancel_url: cancelUrl,
       line_items: [
         {
           price_data: {
