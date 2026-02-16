@@ -46,13 +46,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { amount, email, type, returnUrl } = req.body;
+    const { amount, email, type, returnUrl, locale } = req.body;
 
     // ВРЕМЕННО ДЛЯ ОТЛАДКИ
     console.log('=== DEBUG START ===');
     console.log('Received returnUrl:', returnUrl);
+    console.log('Locale:', locale);
     console.log('Full request body:', req.body);
-    console.log('Origin:', origin);
 
     // Валидация
     if (!amount || amount < 1) {
@@ -74,16 +74,30 @@ export default async function handler(req, res) {
 
     // Используем returnUrl если он есть, иначе дефолтный
     const cancelUrl = returnUrl || `${baseUrl}/donate`;
+
+    // Переводы для Stripe
+    const productNames = {
+      en: {
+        monthly: 'Monthly donation',
+        oneTime: 'One-time donation'
+      },
+      be: {
+        monthly: 'Ежемесячное пожертвование',
+        oneTime: 'Разовое пожертвование'
+      }
+    };
+
+    const lang = locale === 'en' ? 'en' : 'be';
     
-    // ВРЕМЕННО ДЛЯ ОТЛАДКИ
-    console.log('BaseUrl:', baseUrl);
-    console.log('Final cancelUrl:', cancelUrl);
+    console.log('Using cancelUrl:', cancelUrl);
+    console.log('Language:', lang);
     console.log('=== DEBUG END ===');
 
     // Создание Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       mode: type === "monthly" ? "subscription" : "payment",
       customer_email: email,
+      locale: locale === 'en' ? 'en' : 'auto',
       success_url: `${baseUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,
       line_items: [
@@ -91,10 +105,9 @@ export default async function handler(req, res) {
           price_data: {
             currency: "eur",
             product_data: {
-              name:
-                type === "monthly"
-                  ? "Ежемесячное пожертвование"
-                  : "Разовое пожертвование",
+              name: type === "monthly" 
+                ? productNames[lang].monthly 
+                : productNames[lang].oneTime
             },
             unit_amount: Math.round(amount * 100),
             ...(type === "monthly" && {
